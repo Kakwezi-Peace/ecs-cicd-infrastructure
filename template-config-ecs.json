@@ -1,0 +1,11 @@
+{
+  "templateFilePath": "cloudformation/ecs.yaml",
+  "parameters": {
+    "ProjectName": "ecs-cicd-lab"
+  },
+  "tags": {
+    "Project": "ecs-cicd-lab",
+    "Environment": "production",
+    "Owner": "Kakwezi-Peace"
+  }
+}
