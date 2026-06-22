@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECR Repository and VPC Endpoints for ECS CI/CD Lab - Kakwezi Peace
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: ecs-cicd-lab
+
+Resources:
+
+  # ECR Repository - stores your Docker images
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}-app
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ecr
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # VPC Endpoint for ECR API
+  ECRAPIEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub ${ProjectName}-vpc-id
+      ServiceName: !Sub com.amazonaws.eu-north-1.ecr.api
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${ProjectName}-private-subnet-a
+        - Fn::ImportValue: !Sub ${ProjectName}-private-subnet-b
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub ${ProjectName}-vpce-sg-id
+
+  # VPC Endpoint for ECR Docker
+  ECRDockerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub ${ProjectName}-vpc-id
+      ServiceName: !Sub com.amazonaws.eu-north-1.ecr.dkr
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${ProjectName}-private-subnet-a
+        - Fn::ImportValue: !Sub ${ProjectName}-private-subnet-b
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub ${ProjectName}-vpce-sg-id
+
+  # VPC Endpoint for S3 (ECR uses S3 to store image layers)
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub ${ProjectName}-vpc-id
+      ServiceName: !Sub com.amazonaws.eu-north-1.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - Fn::ImportValue: !Sub ${ProjectName}-private-rt-id
+
+  # VPC Endpoint for CloudWatch Logs
+  CloudWatchLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub ${ProjectName}-vpc-id
+      ServiceName: !Sub com.amazonaws.eu-north-1.logs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${ProjectName}-private-subnet-a
+        - Fn::ImportValue: !Sub ${ProjectName}-private-subnet-b
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub ${ProjectName}-vpce-sg-id
+
+Outputs:
+  ECRRepositoryUri:
+    Description: ECR Repository URI
+    Value: !Sub 405894843300.dkr.ecr.eu-north-1.amazonaws.com/${ProjectName}-app
+    Export:
+      Name: !Sub ${ProjectName}-ecr-uri
+
+  ECRRepositoryName:
+    Description: ECR Repository Name
+    Value: !Ref ECRRepository
+    Export:
+      Name: !Sub ${ProjectName}-ecr-name
