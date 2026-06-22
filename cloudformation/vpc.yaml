@@ -186,3 +186,9 @@ Outputs:
     Value: !Ref PrivateSubnetB
     Export:
       Name: !Sub ${ProjectName}-private-subnet-b
+
+  PrivateRouteTableId:
+        Description: Private Route Table ID
+        Value: !Ref PrivateRouteTable
+        Export:
+          Name: !Sub ${ProjectName}-private-rt-id
