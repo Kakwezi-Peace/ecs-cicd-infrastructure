@@ -8,7 +8,6 @@ Parameters:
 
 Resources:
 
-  # CloudWatch Log Group - stores all container logs
   CloudWatchLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -18,7 +17,6 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
@@ -34,7 +32,6 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # IAM Role for ECS Task Execution
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -52,7 +49,6 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # IAM Role for ECS Task
   ECSTaskRole:
     Type: AWS::IAM::Role
     Properties:
@@ -68,9 +64,11 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # ECS Task Definition
   ECSTaskDefinition:
     Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - ECSTaskExecutionRole
+      - ECSTaskRole
     Properties:
       Family: !Sub ${ProjectName}-task
       NetworkMode: awsvpc
@@ -97,7 +95,6 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # Application Load Balancer
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -115,7 +112,6 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # Target Group Blue
   TargetGroupBlue:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -134,7 +130,6 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # Target Group Green
   TargetGroupGreen:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -153,7 +148,6 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # ALB Listener
   ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -164,7 +158,6 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref TargetGroupBlue
 
-  # ECS Service
   ECSService:
     Type: AWS::ECS::Service
     DependsOn: ALBListener
@@ -192,9 +185,9 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # Auto Scaling Target
   AutoScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: ECSService
     Properties:
       MinCapacity: 1
       MaxCapacity: 4
@@ -203,7 +196,6 @@ Resources:
       ServiceNamespace: ecs
       RoleARN: !Sub arn:aws:iam::405894843300:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
 
-  # Auto Scaling Policy - based on CPU
   AutoScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
     Properties:
@@ -217,7 +209,7 @@ Resources:
 
 Outputs:
   ALBDNSName:
-    Description: ALB DNS Name - this is your app URL
+    Description: ALB DNS Name
     Value: !GetAtt ApplicationLoadBalancer.DNSName
     Export:
       Name: !Sub ${ProjectName}-alb-dns
