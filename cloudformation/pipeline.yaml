@@ -50,6 +50,7 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                   - s3:GetBucketVersioning
+                  - s3:GetObjectVersion
                 Resource:
                   - !GetAtt ArtifactBucket.Arn
                   - !Sub ${ArtifactBucket.Arn}/*
@@ -129,3 +130,110 @@ Resources:
       ApplicationName: !Ref CodeDeployApplication
       DeploymentGroupName: !Sub ${ProjectName}-deployment-group
       ServiceRoleArn: !GetAtt CodeDeployRole.Arn
+      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
+      DeploymentStyle:
+        DeploymentType: BLUE_GREEN
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+      BlueGreenDeploymentConfiguration:
+        TerminateBlueInstancesOnDeploymentSuccess:
+          Action: TERMINATE
+          TerminationWaitTimeInMinutes: 5
+        DeploymentReadyOption:
+          ActionOnTimeout: CONTINUE_DEPLOYMENT
+          WaitTimeInMinutes: 0
+      ECSServices:
+        - ClusterName: !Sub ${ProjectName}-cluster
+          ServiceName: !Sub ${ProjectName}-service
+      LoadBalancerInfo:
+        TargetGroupPairInfoList:
+          - TargetGroups:
+              - Name: !Sub ${ProjectName}-tg-blue
+              - Name: !Sub ${ProjectName}-tg-green
+            ProdTrafficRoute:
+              ListenerArns:
+                - arn:aws:elasticloadbalancing:eu-north-1:405894843300:listener/app/ecs-cicd-lab-alb/06e4c8bf4acebc2e/15f8b9ec24e2f57c
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # CodePipeline
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${ProjectName}-pipeline
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: S3_Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: S3
+                Version: '1'
+              Configuration:
+                S3Bucket: !Sub ${ProjectName}-artifacts-405894843300
+                S3ObjectKey: deploy-artifacts.zip
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: DeployArtifact
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: ECS_BlueGreen_Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeployToECS
+                Version: '1'
+              Configuration:
+                ApplicationName: !Ref CodeDeployApplication
+                DeploymentGroupName: !Sub ${ProjectName}-deployment-group
+                TaskDefinitionTemplateArtifact: DeployArtifact
+                AppSpecTemplateArtifact: DeployArtifact
+                TaskDefinitionTemplatePath: taskdef.json
+                AppSpecTemplatePath: appspec.json
+              InputArtifacts:
+                - Name: DeployArtifact
+              RunOrder: 1
+
+  # EventBridge Rule to trigger pipeline on ECR push
+  ECRPushRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${ProjectName}-ecr-push-rule
+      Description: Trigger pipeline when deploy-artifacts.zip uploaded to S3
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Sub ${ProjectName}-artifacts-405894843300
+          object:
+            key:
+              - deploy-artifacts.zip
+      State: ENABLED
+      Targets:
+        - Arn: !Sub arn:aws:codepipeline:eu-north-1:405894843300:${ProjectName}-pipeline
+          Id: CodePipelineTarget
+          RoleArn: !GetAtt EventBridgeRole.Arn
+
+Outputs:
+  PipelineName:
+    Value: !Ref Pipeline
+    Export:
+      Name: !Sub ${ProjectName}-pipeline-name
+  CodeDeployApp:
+    Value: !Ref CodeDeployApplication
+    Export:
+      Name: !Sub ${ProjectName}-codedeploy-app
+  DeploymentGroup:
+    Value: !Ref CodeDeployDeploymentGroup
+    Export:
+      Name: !Sub ${ProjectName}-deployment-group
